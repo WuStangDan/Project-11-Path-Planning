@@ -159,6 +159,21 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 
 }
 
+void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> local);
+
+
+// Global Variables.
+// So they can be easily accessed by CreatePath for use in
+// getXY and other similar functions without having to pass all these
+// vectors into CreatePath.
+vector<double> g_map_waypoints_x;
+vector<double> g_map_waypoints_y;
+vector<double> g_map_waypoints_s;
+vector<double> g_map_waypoints_dx;
+vector<double> g_map_waypoints_dy;
+
+
+
 int main() {
   uWS::Hub h;
 
@@ -195,6 +210,13 @@ int main() {
   	map_waypoints_dx.push_back(d_x);
   	map_waypoints_dy.push_back(d_y);
   }
+
+  g_map_waypoints_x = map_waypoints_x;
+  g_map_waypoints_y = map_waypoints_y;
+  g_map_waypoints_s = map_waypoints_s;
+  g_map_waypoints_dx = map_waypoints_dx;
+  g_map_waypoints_dy = map_waypoints_dy;
+
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -237,9 +259,17 @@ int main() {
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
-
+                vector<double> local(6);
+                local[0] = car_x;
+                local[1] = car_y;
+                local[2] = car_s;
+                local[3] = car_d;
+                local[4] = car_yaw;
+                local[5] = car_speed;
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+                CreatePath(next_x_vals, next_y_vals, local);
+
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
@@ -299,12 +329,28 @@ int main() {
 
 
 
+void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> local)
+{
+  // Import localization data.
+  double car_x = local[0];
+  double car_y = local[1];
+  double car_s = local[2];
+  double car_d = local[3];
+  double car_yaw = local[4];
+  double car_speed = local[5];
 
+  double dt = 1.0/50.0; // Delta time.
+  double m_lane = 6.0; 
 
-
-
-
-
+  
+  //cout << "Current xy values " << car_x << "  " << car_y << endl;
+  //cout << "getXY values " <<XY[0] << "  " <<XY[1] << endl << endl;
+  for (int i = 1; i < 20; i++) {
+    vector<double> XY = getXY(car_s+22*dt*i, m_lane, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
+    x_vals.push_back(XY[0]);
+    y_vals.push_back(XY[1]);
+  }
+}
 
 
 
