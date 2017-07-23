@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "behavior_fsm.h"
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -163,8 +164,9 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 
 
 // My added functions.
-void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local);
+void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local);
 vector<double> JMT(vector< double> start, vector <double> end, double T); // Jerk Minimizing Trajectory.
+vector<double> RectSmooth(vector<double> d, int smooth);
 
 
 // Global Variables.
@@ -180,8 +182,10 @@ vector<double> g_map_waypoints_dy;
 
 
 int main() {
-  uWS::Hub h;
+  // Initialize FSM.
+  Fsm fsm;
 
+  uWS::Hub h;
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
   vector<double> map_waypoints_x;
   vector<double> map_waypoints_y;
@@ -223,7 +227,7 @@ int main() {
   g_map_waypoints_dy = map_waypoints_dy;
 
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&fsm, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -236,12 +240,12 @@ int main() {
 
       if (s != "") {
         auto j = json::parse(s);
-        
+
         string event = j[0].get<string>();
-        
+
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          
+
         	// Main car's localization Data
           	double car_x = j[1]["x"];
           	double car_y = j[1]["y"];
@@ -253,7 +257,7 @@ int main() {
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
-          	// Previous path's end s and d values 
+          	// Previous path's end s and d values
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
 
@@ -264,16 +268,16 @@ int main() {
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
-                vector<double> local(6);
-                local[0] = car_x;
-                local[1] = car_y;
-                local[2] = car_s;
-                local[3] = car_d;
-                local[4] = car_yaw;
-                local[5] = car_speed;
+            vector<double> local(6);
+            local[0] = car_x;
+            local[1] = car_y;
+            local[2] = car_s;
+            local[3] = car_d;
+            local[4] = car_yaw;
+            local[5] = car_speed;
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-                CreatePath(next_x_vals, next_y_vals, previous_path_x, previous_path_y, local);
+            CreatePath(fsm, next_x_vals, next_y_vals, previous_path_x, previous_path_y, local);
 
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
@@ -282,7 +286,7 @@ int main() {
 
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-          
+
         }
       } else {
         // Manual driving
@@ -291,7 +295,7 @@ int main() {
       }
     }
   });
-
+https://stackoverflow.com/questions/13461538/lambda-of-a-lambda-the-function-is-not-captured
   // We don't need this since we're not using HTTP but if it's removed the
   // program
   // doesn't compile :-(
@@ -333,8 +337,10 @@ int main() {
 
 
 
-
-void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local)
+// Create the path the car should follow.
+// Responsible for starting FSM and blending newly generated path
+// with existing path to minimize jerk between the two.
+void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local)
 {
   bool debug = true;
 
@@ -346,8 +352,90 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> p
   double car_yaw = local[4];
   double car_speed = local[5];
 
+
+  double speed_limit = 22.3;
+  double mph_to_ms = 0.44704;
+
+  fsm.SetLocalizationData(local);
+
+  vector<double> prev_s;
+  vector<double> prev_d;
+
+  // Convert x and y into Frenet and load into fsm.
+  /*
+  for (int i = 0; i < prev_x.size(); i++) {
+    vector<double> sd = getFrenet(prev_x[i], prev_y[i], car_yaw, g_map_waypoints_x, g_map_waypoints_y);
+    prev_s.push_back(sd[0]);
+    prev_d.push_back(sd[1]);
+  }*/
+  //fsm.SetPrevPath(prev_s, prev_d);
+
+  vector<double> s;
+
+  int state;
+
+
+  if (fsm.GetStateInProgress() == false) {
+    cout << "Start new state." << endl;
+    fsm.UpdateState();
+    cout << "Got here.";
+    switch (fsm.GetState()) {
+      case 0:
+        cout << "Got here.";
+        s = fsm.AchieveSpeedLimit();
+        break;
+    }
+
+    // Change s values into xy and add to new path.
+    vector<double> raw_x_vals, raw_y_vals;
+
+
+
+    for (int i = 0; i < s.size(); i++) {
+      vector<double> xy = getXY(s[i], 6.0, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
+      raw_x_vals.push_back(xy[0]);
+      raw_y_vals.push_back(xy[1]);
+    }
+
+    int smooth_runs = 10;
+    while (smooth_runs > 0){
+      x_vals = RectSmooth(raw_x_vals, 2);
+      y_vals = RectSmooth(raw_y_vals, 2);
+      smooth_runs -= 1;
+    }
+
+    fsm.SetStateInProgress(true);
+  } else {
+    //cout << "In Current state" << endl;
+    // Enter values into x and y values.
+    prev_x.erase(prev_x.begin());
+    prev_y.erase(prev_y.begin());
+
+    /*for(int i = 1; i < prev_x.size(); i++) {
+      x_vals.push_back(prev_x[i]);
+      y_vals.push_back(prev_y[i]);
+    }*/
+
+
+    x_vals = prev_x;
+    y_vals = prev_y;
+    /*
+    for(int i = 1; i < prev_x.size(); i++) {
+      x_vals.push_back(prev_x[i]);
+      y_vals.push_back(prev_y[i]);
+    }*/
+
+    if (x_vals.size() < 50) {
+      fsm.SetStateInProgress(false);
+      cout << "Ending current state." << endl;
+      cout << "Current Speed " << car_speed << " converted to m per s " << car_speed*mph_to_ms << endl;
+    }
+  }
+
+  return;
+
   double dt = 1.0/50.0; // Delta time.
-  double m_lane = 6.0; 
+  double m_lane = 6.0;
 
 /*
   double dist_inc = 0.5;
@@ -361,15 +449,14 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> p
   return;
 */
 
-  
-  double speed_limit = 22.3;
-  double mph_to_ms = 0.44704;
-  
+  /*
+
+
   vector<double> a_coeff;
 
   vector<double> start = {car_s, car_speed*mph_to_ms, 0};
   vector<double> end = {car_s + 200, speed_limit, 0};
-  
+
   a_coeff = JMT(start, end, 11.0);
 
 
@@ -381,7 +468,7 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> p
     st += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
     s.push_back(st);
   }
-  
+
   // Enter values into x and y values.
   for(int i = 1; i < prev_x.size(); i++) {
     x_vals.push_back(prev_x[i]);
@@ -390,7 +477,7 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> p
 
   if (x_vals.size() > 5) return;
 
-  for (int i = 0; i < s.size(); i++) { 
+  for (int i = 0; i < s.size(); i++) {
     vector<double> xy = getXY(s[i], m_lane, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
     x_vals.push_back(xy[0]);
     y_vals.push_back(xy[1]);
@@ -405,8 +492,8 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> p
     cout << "Current s " << car_s << endl;
     cout << "Current speed " << car_speed << endl;
     cout << "Next 3 s " << s[0] << " " << s[1] << " " << s[2] << "\n";
-    
-    
+
+
     for (int i = 0; i < a_coeff.size(); i++) {
       //cout << a_coeff[i] << " ";
       //cout << s[i] << " ";
@@ -414,135 +501,22 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> p
     }
     cout << endl << endl;
 
-  }
+  }*/
 }
 
-
-// I'm having an issue I can't resolve when trying to use
-// Eigen's .inverse() so have to do Gaussian elimination instead of
-// the easier matrix method.
-vector<double> JMT(vector< double> start, vector <double> end, double T)
+// Used to smooth x and y values.
+vector<double> RectSmooth(vector<double> d, int smooth)
 {
-  vector<double> answer(6);
-  answer[0] = start[0];
-  answer[1] = start[1];
-  answer[2] = start[2]/2;
-    
-  // Calculate RHS of equation.
+  vector<double> out;
+  for (int i = smooth; i < d.size()-smooth; i++) {
+    double avg = d[i];
 
-  vector<double> rhs(3);
-  
-  rhs[0] = end[0] - (start[0]+start[1]*T+0.5*start[2]*T*T);
-  rhs[1] = end[1] - (start[1]+start[2]*T);
-  rhs[2] = end[2] - start[2];
+    for (int j = 1; j < smooth+1; j++) {
+      avg += d[i+j];
+      avg += d[i-j];
+    }
+    out.push_back(avg / (smooth*2+1));
+  }
 
-  // Create matrix to perform gaussian elimination.
-
-  MatrixXd m(3,4);
-  m(0,0) = pow(T,3);
-  m(0,1) = pow(T,4);
-  m(0,2) = pow(T,5);
-  m(0,3) = rhs[0];
-
-  m(1,0) = pow(T,2) * 3;
-  m(1,1) = pow(T,3) * 4;
-  m(1,2) = pow(T,4) * 5;
-  m(1,3) = rhs[1];
-
-  m(2,0) = T * 6;
-  m(2,1) = pow(T,2) * 12;
-  m(2,2) = pow(T,3) * 20;
-  m(2,3) = rhs[2];
-
-  // Perform Gaussian elimination.
-  double r0 = -1 * (m(1,0) / m(0,0));
-  m.row(1) = m.row(1) + m.row(0)*r0;
-  r0 = -1 * (m(2,0) / m(0,0));
-  m.row(2) = m.row(2) + m.row(0) * r0;
-  // First column is all zeros except for first.
-
-  // Second column.
-  double r1 = -1 * (m(0,1) / m(1,1));
-  m.row(0) = m.row(0) + m.row(1) * r1;
-  r1 = -1 * (m(2,1) / m(1,1));
-  m.row(2) = m.row(2) + m.row(1) * r1;
-  
-  // Third Column.
-  double r2 = -1 * (m(0,2) / m(2,2));
-  m.row(0) = m.row(0) + m.row(2) * r2;
-  r2 = -1 * (m(1,2) / m(2,2));
-  m.row(1) = m.row(1) + m.row(2) * r2;
-
-
-  answer[3] = m(0,3) / m(0,0);
-  answer[4] = m(1,3) / m(1,1);
-  answer[5] = m(2,3) / m(2,2);
-
-	
-  return answer;
+  return out;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
