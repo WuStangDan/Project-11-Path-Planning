@@ -10,6 +10,8 @@
 #include "json.hpp"
 
 using namespace std;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
 
 // for convenience
 using json = nlohmann::json;
@@ -159,7 +161,10 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 
 }
 
-void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> local);
+
+// My added functions.
+void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local);
+vector<double> JMT(vector< double> start, vector <double> end, double T); // Jerk Minimizing Trajectory.
 
 
 // Global Variables.
@@ -268,7 +273,7 @@ int main() {
                 local[5] = car_speed;
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-                CreatePath(next_x_vals, next_y_vals, local);
+                CreatePath(next_x_vals, next_y_vals, previous_path_x, previous_path_y, local);
 
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
@@ -329,8 +334,10 @@ int main() {
 
 
 
-void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> local)
+void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local)
 {
+  bool debug = true;
+
   // Import localization data.
   double car_x = local[0];
   double car_y = local[1];
@@ -342,14 +349,137 @@ void CreatePath(vector<double> &x_vals, vector<double> &y_vals, vector<double> l
   double dt = 1.0/50.0; // Delta time.
   double m_lane = 6.0; 
 
-  
-  //cout << "Current xy values " << car_x << "  " << car_y << endl;
-  //cout << "getXY values " <<XY[0] << "  " <<XY[1] << endl << endl;
-  for (int i = 1; i < 20; i++) {
-    vector<double> XY = getXY(car_s+22*dt*i, m_lane, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
-    x_vals.push_back(XY[0]);
-    y_vals.push_back(XY[1]);
+/*
+  double dist_inc = 0.5;
+  for(int i = 0; i < 50; i++)
+  {
+    x_vals.push_back(car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
+    y_vals.push_back(car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
   }
+    cout << "Current s " << car_s << endl;
+    cout << "Current speed " << car_speed << endl;
+  return;
+*/
+
+  
+  double speed_limit = 22.3;
+  double mph_to_ms = 0.44704;
+  
+  vector<double> a_coeff;
+
+  vector<double> start = {car_s, car_speed*mph_to_ms, 0};
+  vector<double> end = {car_s + 200, speed_limit, 0};
+  
+  a_coeff = JMT(start, end, 11.0);
+
+
+  vector<double> s;
+
+  for (int i = 0; i < 550; i++) {
+    double T = i*dt;
+    double st = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
+    st += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
+    s.push_back(st);
+  }
+  
+  // Enter values into x and y values.
+  for(int i = 1; i < prev_x.size(); i++) {
+    x_vals.push_back(prev_x[i]);
+    y_vals.push_back(prev_y[i]);
+  }
+
+  if (x_vals.size() > 5) return;
+
+  for (int i = 0; i < s.size(); i++) { 
+    vector<double> xy = getXY(s[i], m_lane, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
+    x_vals.push_back(xy[0]);
+    y_vals.push_back(xy[1]);
+  }
+
+  if (debug == true) {
+    double T = 1.0;
+    double st = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
+    st += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
+
+    cout << "Desired s after 1 seconds " << st << endl;
+    cout << "Current s " << car_s << endl;
+    cout << "Current speed " << car_speed << endl;
+    cout << "Next 3 s " << s[0] << " " << s[1] << " " << s[2] << "\n";
+    
+    
+    for (int i = 0; i < a_coeff.size(); i++) {
+      //cout << a_coeff[i] << " ";
+      //cout << s[i] << " ";
+      continue;
+    }
+    cout << endl << endl;
+
+  }
+}
+
+
+// I'm having an issue I can't resolve when trying to use
+// Eigen's .inverse() so have to do Gaussian elimination instead of
+// the easier matrix method.
+vector<double> JMT(vector< double> start, vector <double> end, double T)
+{
+  vector<double> answer(6);
+  answer[0] = start[0];
+  answer[1] = start[1];
+  answer[2] = start[2]/2;
+    
+  // Calculate RHS of equation.
+
+  vector<double> rhs(3);
+  
+  rhs[0] = end[0] - (start[0]+start[1]*T+0.5*start[2]*T*T);
+  rhs[1] = end[1] - (start[1]+start[2]*T);
+  rhs[2] = end[2] - start[2];
+
+  // Create matrix to perform gaussian elimination.
+
+  MatrixXd m(3,4);
+  m(0,0) = pow(T,3);
+  m(0,1) = pow(T,4);
+  m(0,2) = pow(T,5);
+  m(0,3) = rhs[0];
+
+  m(1,0) = pow(T,2) * 3;
+  m(1,1) = pow(T,3) * 4;
+  m(1,2) = pow(T,4) * 5;
+  m(1,3) = rhs[1];
+
+  m(2,0) = T * 6;
+  m(2,1) = pow(T,2) * 12;
+  m(2,2) = pow(T,3) * 20;
+  m(2,3) = rhs[2];
+
+  // Perform Gaussian elimination.
+  double r0 = -1 * (m(1,0) / m(0,0));
+  m.row(1) = m.row(1) + m.row(0)*r0;
+  r0 = -1 * (m(2,0) / m(0,0));
+  m.row(2) = m.row(2) + m.row(0) * r0;
+  // First column is all zeros except for first.
+
+  // Second column.
+  double r1 = -1 * (m(0,1) / m(1,1));
+  m.row(0) = m.row(0) + m.row(1) * r1;
+  r1 = -1 * (m(2,1) / m(1,1));
+  m.row(2) = m.row(2) + m.row(1) * r1;
+  
+  // Third Column.
+  double r2 = -1 * (m(0,2) / m(2,2));
+  m.row(0) = m.row(0) + m.row(2) * r2;
+  r2 = -1 * (m(1,2) / m(2,2));
+  m.row(1) = m.row(1) + m.row(2) * r2;
+
+
+  answer[3] = m(0,3) / m(0,0);
+  answer[4] = m(1,3) / m(1,1);
+  answer[5] = m(2,3) / m(2,2);
+
+	
+  return answer;
 }
 
 
