@@ -164,7 +164,7 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 
 
 // My added functions.
-void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local);
+void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local, vector<vector<double> > sensor_fusion);
 vector<double> JMT(vector< double> start, vector <double> end, double T); // Jerk Minimizing Trajectory.
 vector<double> RectSmooth(vector<double> d, int smooth);
 
@@ -277,8 +277,7 @@ int main() {
             local[5] = car_speed;
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-            CreatePath(fsm, next_x_vals, next_y_vals, previous_path_x, previous_path_y, local);
-
+            CreatePath(fsm, next_x_vals, next_y_vals, previous_path_x, previous_path_y, local, sensor_fusion);
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
@@ -340,7 +339,7 @@ https://stackoverflow.com/questions/13461538/lambda-of-a-lambda-the-function-is-
 // Create the path the car should follow.
 // Responsible for starting FSM and blending newly generated path
 // with existing path to minimize jerk between the two.
-void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local)
+void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector<double> prev_x, vector<double> prev_y, vector<double> local, vector<vector<double> > sensor_fusion)
 {
   bool debug = true;
 
@@ -352,57 +351,155 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
   double car_yaw = local[4];
   double car_speed = local[5];
 
+  // Print Sensor fusion.
+  //for (int i = 100; i < sensor_fusion.size(); i++) {
+  //  cout << "ID: " << sensor_fusion[i][0] << endl;
+  //  cout << "X: " << sensor_fusion[i][1] << endl;
+  //  cout << "Y: " << sensor_fusion[i][2] << endl;
+  //  cout << "S: " << sensor_fusion[i][5] << endl;
+  //  cout << "D: " << sensor_fusion[i][6] << endl;
+  //  cout << endl;
+  //}
 
-  double speed_limit = 22.3;
-  double mph_to_ms = 0.44704;
+  //cout << "Current X, Y, Yaw, S, D " << car_x << ", " << car_y << ", " << car_yaw << ", ";
+  //cout << car_s << ", " << car_d << endl;
+
+
+  const double speed_limit = 22.3;
+  const double mph_to_ms = 0.44704;
+  const double dt = 1.0/50.0;
 
   fsm.SetLocalizationData(local);
-
-  vector<double> prev_s;
-  vector<double> prev_d;
-
-  // Convert x and y into Frenet and load into fsm.
-  /*
-  for (int i = 0; i < prev_x.size(); i++) {
-    vector<double> sd = getFrenet(prev_x[i], prev_y[i], car_yaw, g_map_waypoints_x, g_map_waypoints_y);
-    prev_s.push_back(sd[0]);
-    prev_d.push_back(sd[1]);
-  }*/
-  //fsm.SetPrevPath(prev_s, prev_d);
+  fsm.SetSensorFusion(sensor_fusion);
 
   vector<double> s;
-
-  int state;
-
+  vector<double> d;
+  double time_to_s;
+  double final_speed;
 
   if (fsm.GetStateInProgress() == false) {
-    cout << "Start new state." << endl;
     fsm.UpdateState();
-    cout << "Got here.";
     switch (fsm.GetState()) {
       case 0:
-        cout << "Got here.";
-        s = fsm.AchieveSpeedLimit();
+        fsm.AchieveSpeedLimit();
+        s = fsm.GetSPath();
+        d = fsm.GetDPath();
+        time_to_s = fsm.GetTimeToSPath();
+        final_speed = fsm.GetFinalSpeed();
+        // xy to sd back to xy conversion isn't perfect since waypoints have
+        // significant distance between them.
+        cout << "State: Achieve Speed Limit." << endl;
+        break;
+      case 1:
+        fsm.StayInLane();
+        s = fsm.GetSPath();
+        d = fsm.GetDPath();
+        time_to_s = fsm.GetTimeToSPath();
+        final_speed = fsm.GetFinalSpeed();
+        cout << "State: Stay In Lane." << endl;
+        break;
+      case 2:
+        fsm.FollowCar();
+        s = fsm.GetSPath();
+        d = fsm.GetDPath();
+        time_to_s = fsm.GetTimeToSPath();
+        final_speed = fsm.GetFinalSpeed();
+        cout << "State: Follow Car." << endl;
+        break;
+      case 3:
+        fsm.SwitchLanes();
+        s = fsm.GetSPath();
+        d = fsm.GetDPath();
+        time_to_s = fsm.GetTimeToSPath();
+        final_speed = fsm.GetFinalSpeed();
+        cout << "State: Switch Lanes." << endl;
         break;
     }
 
-    // Change s values into xy and add to new path.
-    vector<double> raw_x_vals, raw_y_vals;
+    // Calculate xy for end points decided by FSM.
+    vector<double> xy1 = getXY(s[0], d[0], g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
+    //cout << "New endpoints X, Y, S, D " << xy1[0] << ", " << xy1[1] << ", ";
+    //cout << s[0] << ", " << d[0] << endl;
+    vector<double> xy2 = getXY(s[1], d[1], g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
+    //cout << "New endpoints X, Y, S, D " << xy2[0] << ", " << xy2[1] << ", ";
+    //cout << s[0] << ", " << d[0] << endl;
+    double heading = atan2(xy2[1] - xy1[1], xy2[0] - xy1[0]);
+    //cout << "heading " << heading << " Cars current yaw " << car_yaw * 3.14159 / 180 << endl;
+
+    // Calculate JMT for X.
+    vector<double> x;
+    vector<double> start;
+    if (prev_x.size() < 9999) {
+      start = {car_x, car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
+    } else {
+      start = {prev_x[4], car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
+      for (int i = 1; i < 4; i++) {
+        x.push_back(prev_x[i]);
+      }
+    }
+    vector<double> end = {xy2[0], final_speed*cos(heading), 0};
+
+    vector<double> a_coeff = fsm.JMT(start, end, time_to_s);
 
 
-
-    for (int i = 0; i < s.size(); i++) {
-      vector<double> xy = getXY(s[i], 6.0, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
-      raw_x_vals.push_back(xy[0]);
-      raw_y_vals.push_back(xy[1]);
+    for (int i = 1; i < 150; i++) {
+      double T = i*dt;
+      double xt = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
+      xt += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
+      x.push_back(xt);
     }
 
-    int smooth_runs = 10;
+    // Calculate JMT for Y.
+    vector<double> y;
+    if (prev_y.size() < 9999) {
+      start = {car_y, car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
+    } else {
+      start = {prev_y[4], car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
+      for (int i = 1; i < 4; i++) {
+        y.push_back(prev_y[i]);
+      }
+    }
+    end = {xy2[1], final_speed*sin(heading), 0};
+
+    a_coeff = fsm.JMT(start, end, time_to_s);
+
+
+    for (int i = 1; i < 150; i++) {
+      double T = i*dt;
+      double yt = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
+      yt += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
+      y.push_back(yt);
+    }
+
+
+
+    x_vals = x;
+    y_vals = y;
+    //cout << "New XY " << endl;
+    //for (int i = 0; i < x_vals.size(); i++) {
+    //  cout << "X, Y " << x_vals[i] << ", " << y_vals[i] << endl;
+    //}
+
+
+
+    //x_vals = raw_x_vals;
+    //y_vals = raw_y_vals;
+
+    int smooth_runs = 0;
     while (smooth_runs > 0){
-      x_vals = RectSmooth(raw_x_vals, 2);
-      y_vals = RectSmooth(raw_y_vals, 2);
+      x_vals = RectSmooth(x_vals, 20);
+      x_vals = RectSmooth(x_vals, 5);
+      x_vals = RectSmooth(x_vals, 1);
+      y_vals = RectSmooth(y_vals, 20);
+      y_vals = RectSmooth(y_vals, 5);
+      y_vals = RectSmooth(y_vals, 1);
       smooth_runs -= 1;
     }
+
+    //cout << "New Smooth" << endl;
+    //for (int i = 0; i < x_vals.size(); i++) {
+    //  cout << "X, Y " << x_vals[i] << ", " << y_vals[i] << endl;
+    //}
 
     fsm.SetStateInProgress(true);
   } else {
@@ -411,103 +508,34 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     prev_x.erase(prev_x.begin());
     prev_y.erase(prev_y.begin());
 
-    /*for(int i = 1; i < prev_x.size(); i++) {
-      x_vals.push_back(prev_x[i]);
-      y_vals.push_back(prev_y[i]);
-    }*/
-
-
     x_vals = prev_x;
     y_vals = prev_y;
-    /*
-    for(int i = 1; i < prev_x.size(); i++) {
-      x_vals.push_back(prev_x[i]);
-      y_vals.push_back(prev_y[i]);
-    }*/
 
-    if (x_vals.size() < 50) {
+    int vals_size_min;
+    if (fsm.GetState() == 0 || fsm.GetState() == 3) {
+      vals_size_min = 25;
+    } else {
+      vals_size_min = 125;
+    }
+    if (x_vals.size() < vals_size_min) {
       fsm.SetStateInProgress(false);
-      cout << "Ending current state." << endl;
-      cout << "Current Speed " << car_speed << " converted to m per s " << car_speed*mph_to_ms << endl;
     }
   }
 
   return;
-
-  double dt = 1.0/50.0; // Delta time.
-  double m_lane = 6.0;
-
-/*
-  double dist_inc = 0.5;
-  for(int i = 0; i < 50; i++)
-  {
-    x_vals.push_back(car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
-    y_vals.push_back(car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
-  }
-    cout << "Current s " << car_s << endl;
-    cout << "Current speed " << car_speed << endl;
-  return;
-*/
-
-  /*
-
-
-  vector<double> a_coeff;
-
-  vector<double> start = {car_s, car_speed*mph_to_ms, 0};
-  vector<double> end = {car_s + 200, speed_limit, 0};
-
-  a_coeff = JMT(start, end, 11.0);
-
-
-  vector<double> s;
-
-  for (int i = 0; i < 550; i++) {
-    double T = i*dt;
-    double st = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
-    st += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
-    s.push_back(st);
-  }
-
-  // Enter values into x and y values.
-  for(int i = 1; i < prev_x.size(); i++) {
-    x_vals.push_back(prev_x[i]);
-    y_vals.push_back(prev_y[i]);
-  }
-
-  if (x_vals.size() > 5) return;
-
-  for (int i = 0; i < s.size(); i++) {
-    vector<double> xy = getXY(s[i], m_lane, g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
-    x_vals.push_back(xy[0]);
-    y_vals.push_back(xy[1]);
-  }
-
-  if (debug == true) {
-    double T = 1.0;
-    double st = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
-    st += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
-
-    cout << "Desired s after 1 seconds " << st << endl;
-    cout << "Current s " << car_s << endl;
-    cout << "Current speed " << car_speed << endl;
-    cout << "Next 3 s " << s[0] << " " << s[1] << " " << s[2] << "\n";
-
-
-    for (int i = 0; i < a_coeff.size(); i++) {
-      //cout << a_coeff[i] << " ";
-      //cout << s[i] << " ";
-      continue;
-    }
-    cout << endl << endl;
-
-  }*/
 }
 
 // Used to smooth x and y values.
+// Erases smooth number of points at the end.
 vector<double> RectSmooth(vector<double> d, int smooth)
 {
   vector<double> out;
+  for (int i = 0; i < smooth; i++) {
+    out.push_back(d[i]);
+  }
+
+
+
   for (int i = smooth; i < d.size()-smooth; i++) {
     double avg = d[i];
 
@@ -517,6 +545,5 @@ vector<double> RectSmooth(vector<double> d, int smooth)
     }
     out.push_back(avg / (smooth*2+1));
   }
-
   return out;
 }

@@ -13,10 +13,20 @@ public:
   // Destructor.
   ~Fsm();
 
+  // FSM Main Functions
   void UpdateState();
 
   // Initial State
-  vector<double> AchieveSpeedLimit();
+  void AchieveSpeedLimit();
+
+  // Stay in current lane and maintain speed.
+  void StayInLane();
+
+  // Follow Car infront.
+  void FollowCar();
+
+  // Switch to a new lane.
+  void SwitchLanes();
 
   // Return current state.
   int GetState();
@@ -25,11 +35,30 @@ public:
 
   void SetStateInProgress(bool set);
 
+  // Auxiliary Functions (Used in main functions).
+  int CarInFront();
+
+  int FindLane(double d_in);
+
+  vector<double> JMT(vector< double> start, vector <double> end, double T);
+
+
+
+
+  // Get and Set Functions.
   void SetLocalizationData(vector<double> l);
+
+  void SetSensorFusion(vector<vector<double> > sf_in);
 
   void SetPrevPath(vector<double> s, vector<double> d);
 
-  vector<double> JMT(vector< double> start, vector <double> end, double T);
+  vector<double> GetSPath();
+
+  vector<double> GetDPath();
+
+  double GetTimeToSPath();
+
+  double GetFinalSpeed();
 
 
 
@@ -38,8 +67,9 @@ private:
   int state;
   // 0 - Starting state at well below speed limit. Increase to speed limit and don't
   // run into any cars infront.
-
-  // 1 - Keep lane.
+  // 1 - Stay in lane.
+  // 2 - Follow car infront.
+  // 3 - Switch Lanes.
 
   bool state_in_progress;
 
@@ -51,9 +81,21 @@ private:
   double car_yaw;
   double car_speed;
 
+  // Sensor Fusion
+  vector<vector<double> > sf;
+
   // Previous Path.
   vector<double> prev_s;
   vector<double> prev_d;
+
+  // State Count
+  int current_state_count = 0;
+
+  // New Path
+  vector<double> s_path;
+  vector<double> d_path;
+  double time_to_s_path;
+  double final_speed;
 
   // Constants
   const double speed_limit = 22.3;

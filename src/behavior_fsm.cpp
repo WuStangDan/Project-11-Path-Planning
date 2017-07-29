@@ -19,49 +19,103 @@ Fsm::~Fsm() {}
 
 void Fsm::UpdateState()
 {
-  return;
-  // Still in inital state.
-  // Wait for speed limit to be achieved.
+  // Initial State. Can only change to Stay in Lane.
   if (state == 0) {
+    if (car_speed*mph_to_ms > 19.8) {
+      state = 1;
+      current_state_count = 0;
+    }
     return;
   }
+
+  // Stay In Lane. Can only switch to follow car.
+  if (state == 1) {
+    int id = CarInFront();
+    if (id != -1) {
+      state = 2;
+      current_state_count = 0;
+    }
+  }
+
+  // If car in front disappears, got to stay in lane.
+  if (state == 2) {
+    int id = CarInFront();
+    if (id == -1) {
+      state = 1;
+      current_state_count = 0;
+    }
+    current_state_count += 1;
+    cout << "State count " << current_state_count  << endl;
+    if (current_state_count > 30) {
+      state = 3;
+    }
+  }
+
+
+
 }
 
-vector<double> Fsm::AchieveSpeedLimit()
+void Fsm::AchieveSpeedLimit()
+
 {
-  vector<double> s;
 
-  // Load previous except for last.
-
-  // Determine starting position for next path.
-  double start_s;
-  if (prev_s.size() > 0) {
-    start_s = prev_s[prev_s.size()-1];
-    for (int i = 0; i < prev_s.size()-1; i++) {
-      s.push_back(prev_s[i]);
-    }
+  s_path = {car_s+45, car_s+50};
+  d_path = {6.0, 6.0};
+  //if (speed_diff < 5) speed_diff = 0;
+  final_speed = speed_limit*0.95;
+  if (car_speed*mph_to_ms > 10) {
+    time_to_s_path = ((50.0 / final_speed) + (50.0 / (car_speed*mph_to_ms)))/2;
   } else {
-    start_s = car_s;
+    time_to_s_path = 4;
   }
 
+  return;
+}
 
-  vector<double> start = {start_s, car_speed*mph_to_ms, 0};
-  vector<double> end = {start_s + 300, speed_limit*1, 0};
+void Fsm::StayInLane()
+{
+  int current_lane = FindLane(car_d);
 
-  cout << "Current Speed " << car_speed << " converted to m per s " << car_speed*mph_to_ms << endl;
+  s_path = {car_s+35, car_s+40};
+  d_path = {current_lane*4 + 2.0, current_lane*4 + 2.0};
+  final_speed = speed_limit*0.95;
+  time_to_s_path = ((40 / final_speed) + (40 / (car_speed*mph_to_ms)))/2;
 
-  vector<double> a_coeff = JMT(start, end, 14);
+
+}
+
+void Fsm::FollowCar()
+{
+  int id = CarInFront();
+  int current_lane = FindLane(car_d);
+
+  double infront_speed = sqrt(sf[id][3]*sf[id][3] + sf[id][4]*sf[id][4]);
+  cout << "Infront speed " << infront_speed << endl;
+
+  s_path = {car_s+35, car_s+40};
+  d_path = {current_lane*4+2.0, current_lane*4+2.0};
 
 
-
-  for (int i = 1; i < 150; i++) {
-    double T = i*dt;
-    double st = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
-    st += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
-    s.push_back(st);
+  if (sf[id][5] - car_s < 15) {
+    final_speed = infront_speed *0.7;
+    cout << "WAY TOO CLOSE" << endl;
+  } else if (sf[id][5] - car_s < 35 ) {
+    final_speed = infront_speed*0.9;
+    cout << "Backing off" << endl;
+  } else {
+    final_speed = infront_speed;
+    cout << "Matching Speed" << endl;
   }
+  time_to_s_path = ((40 / final_speed) + (40 / (car_speed*mph_to_ms)))/2;
 
-  return s;
+}
+
+void Fsm::SwitchLanes()
+{
+  s_path = {car_s+45, car_s+50};
+  d_path = {10.0, 10.0};
+  final_speed = speed_limit*0.95;
+  time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
 }
 
 int Fsm::GetState()
@@ -79,6 +133,42 @@ void Fsm::SetStateInProgress(bool set)
   state_in_progress = set;
 }
 
+
+// Determine if car is in the same lane. If yes return ID.
+int Fsm::CarInFront()
+{
+  int current_lane = FindLane(car_d);
+
+
+  int id = - 1;
+  double s_dist = 50;
+  for (int i = 0; i < sf.size(); i++) {
+    int sf_lane = FindLane(sf[i][6]);
+    if (sf_lane == current_lane && sf[i][5] > car_s) {
+      if (sf[i][5] - car_s < s_dist) {
+        s_dist = sf[i][5] - car_s;
+        id = i;
+      }
+    }
+
+  }
+
+  return id;
+}
+
+int Fsm::FindLane(double d_in)
+{
+  int lane; // 0-left, 1-middle, 2-right.
+  if (d_in < 4) {
+    lane = 0;
+  } else if (d_in < 8) {
+    lane = 1;
+  } else {
+    lane = 2;
+  }
+  return lane;
+}
+
 void Fsm::SetLocalizationData(vector<double> l)
 {
   car_x = l[0];
@@ -89,9 +179,16 @@ void Fsm::SetLocalizationData(vector<double> l)
   car_speed = l[5];
 }
 
+void Fsm::SetSensorFusion(vector<vector<double> > sf_in)
+{
+  sf = sf_in;
+}
+
 void Fsm::SetPrevPath(vector<double> s, vector<double> d)
 {
+  prev_s.clear();
   prev_s = s;
+  prev_d.clear();
   prev_d = d;
 }
 
@@ -159,4 +256,24 @@ vector<double> Fsm::JMT(vector< double> start, vector <double> end, double T)
 
 
   return answer;
+}
+
+vector<double> Fsm::GetSPath()
+{
+  return s_path;
+}
+
+vector<double> Fsm::GetDPath()
+{
+  return d_path;
+}
+
+double Fsm::GetTimeToSPath()
+{
+  return time_to_s_path;
+}
+
+double Fsm::GetFinalSpeed()
+{
+  return final_speed;
 }
