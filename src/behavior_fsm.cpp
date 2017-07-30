@@ -35,7 +35,10 @@ void Fsm::UpdateState()
       state = 2;
       current_state_count = 0;
     }
+    return;
   }
+
+
 
   // If car in front disappears, got to stay in lane.
   if (state == 2) {
@@ -43,12 +46,30 @@ void Fsm::UpdateState()
     if (id == -1) {
       state = 1;
       current_state_count = 0;
+      return;
     }
     current_state_count += 1;
     cout << "State count " << current_state_count  << endl;
-    if (current_state_count > 30) {
+    if (current_state_count > 3) {
       state = 3;
+      return;
     }
+  }
+
+  // Prepare for lane switch.
+  // Go to state 4 when lane is open.
+  if (state == 3) {
+    cout << "Target lane is " << target_lane << endl;
+    if (target_lane != -1) {
+      state = 4;
+      return;
+    }
+  }
+
+  // State 4 should only run once then complete.
+  if (state == 4) {
+    state = 1;
+    return;
   }
 
 
@@ -62,7 +83,7 @@ void Fsm::AchieveSpeedLimit()
   s_path = {car_s+45, car_s+50};
   d_path = {6.0, 6.0};
   //if (speed_diff < 5) speed_diff = 0;
-  final_speed = speed_limit*0.95;
+  final_speed = speed_limit*0.9;
   if (car_speed*mph_to_ms > 10) {
     time_to_s_path = ((50.0 / final_speed) + (50.0 / (car_speed*mph_to_ms)))/2;
   } else {
@@ -99,7 +120,7 @@ void Fsm::FollowCar()
   if (sf[id][5] - car_s < 15) {
     final_speed = infront_speed *0.7;
     cout << "WAY TOO CLOSE" << endl;
-  } else if (sf[id][5] - car_s < 35 ) {
+  } else if (sf[id][5] - car_s < 25 ) {
     final_speed = infront_speed*0.9;
     cout << "Backing off" << endl;
   } else {
@@ -110,12 +131,43 @@ void Fsm::FollowCar()
 
 }
 
+void Fsm::PrepareLaneSwitch()
+{
+  int current_lane = FindLane(car_d);
+  int lane_left=0, lane_mid=1, lane_right=2;
+
+  if (current_lane == lane_left || current_lane == lane_right) {
+    if (LaneFree(lane_mid)){
+      target_lane = lane_mid;
+      cout << "LANE MID OPEN" << endl;
+      return;
+    }
+  }
+
+  if (current_lane == lane_mid) {
+    if (LaneFree(lane_left)) {
+      target_lane = lane_left;
+      cout << "LANE LEFT OPEN" << endl;
+      return;
+    }
+    if (LaneFree(lane_right)) {
+      target_lane = lane_right;
+      cout << "LANE RIGHT OPEN" << endl;
+      return;
+    }
+  }
+
+  FollowCar();
+}
+
 void Fsm::SwitchLanes()
 {
   s_path = {car_s+45, car_s+50};
-  d_path = {10.0, 10.0};
+  d_path = {target_lane*4+2.0, target_lane*4+2.0};
   final_speed = speed_limit*0.95;
   time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
+
+  target_lane = -1;
 }
 
 int Fsm::GetState()
@@ -154,6 +206,19 @@ int Fsm::CarInFront()
   }
 
   return id;
+}
+
+bool Fsm::LaneFree(int lane)
+{
+  for (int i = 0; i < sf.size(); i++) {
+    int sf_lane = FindLane(sf[i][6]);
+    if (sf_lane == lane) {
+      if ((sf[i][5] - car_s) < 50 && (car_s - sf[i][5]) < 5) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 int Fsm::FindLane(double d_in)

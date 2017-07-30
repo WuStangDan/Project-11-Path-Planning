@@ -25,6 +25,8 @@ public:
   // Follow Car infront.
   void FollowCar();
 
+  void PrepareLaneSwitch();
+
   // Switch to a new lane.
   void SwitchLanes();
 
@@ -37,6 +39,8 @@ public:
 
   // Auxiliary Functions (Used in main functions).
   int CarInFront();
+
+  bool LaneFree(int lane);
 
   int FindLane(double d_in);
 
@@ -88,8 +92,9 @@ private:
   vector<double> prev_s;
   vector<double> prev_d;
 
-  // State Count
+  // State variables.
   int current_state_count = 0;
+  int target_lane = -1;
 
   // New Path
   vector<double> s_path;

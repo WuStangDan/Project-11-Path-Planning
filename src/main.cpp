@@ -407,6 +407,14 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         cout << "State: Follow Car." << endl;
         break;
       case 3:
+        fsm.PrepareLaneSwitch();
+        s = fsm.GetSPath();
+        d = fsm.GetDPath();
+        time_to_s = fsm.GetTimeToSPath();
+        final_speed = fsm.GetFinalSpeed();
+        cout << "State: Prepare Lane Switch." << endl;
+        break;
+      case 4:
         fsm.SwitchLanes();
         s = fsm.GetSPath();
         d = fsm.GetDPath();
@@ -512,7 +520,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     y_vals = prev_y;
 
     int vals_size_min;
-    if (fsm.GetState() == 0 || fsm.GetState() == 3) {
+    if (fsm.GetState() == 0 || fsm.GetState() == 4) {
       vals_size_min = 25;
     } else {
       vals_size_min = 125;
