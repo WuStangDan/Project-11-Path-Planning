@@ -97,10 +97,10 @@ void Fsm::StayInLane()
 {
   int current_lane = FindLane(car_d);
 
-  s_path = {car_s+35, car_s+40};
+  s_path = {car_s+45, car_s+50};
   d_path = {current_lane*4 + 2.0, current_lane*4 + 2.0};
   final_speed = speed_limit*0.95;
-  time_to_s_path = ((40 / final_speed) + (40 / (car_speed*mph_to_ms)))/2;
+  time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
 
 
 }
@@ -113,7 +113,7 @@ void Fsm::FollowCar()
   double infront_speed = sqrt(sf[id][3]*sf[id][3] + sf[id][4]*sf[id][4]);
   cout << "Infront speed " << infront_speed << endl;
 
-  s_path = {car_s+35, car_s+40};
+  s_path = {car_s+45, car_s+50};
   d_path = {current_lane*4+2.0, current_lane*4+2.0};
 
 
@@ -127,7 +127,7 @@ void Fsm::FollowCar()
     final_speed = infront_speed;
     cout << "Matching Speed" << endl;
   }
-  time_to_s_path = ((40 / final_speed) + (40 / (car_speed*mph_to_ms)))/2;
+  time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
 
 }
 
@@ -140,7 +140,6 @@ void Fsm::PrepareLaneSwitch()
     if (LaneFree(lane_mid)){
       target_lane = lane_mid;
       cout << "LANE MID OPEN" << endl;
-      return;
     }
   }
 
@@ -148,12 +147,10 @@ void Fsm::PrepareLaneSwitch()
     if (LaneFree(lane_left)) {
       target_lane = lane_left;
       cout << "LANE LEFT OPEN" << endl;
-      return;
     }
     if (LaneFree(lane_right)) {
       target_lane = lane_right;
       cout << "LANE RIGHT OPEN" << endl;
-      return;
     }
   }
 

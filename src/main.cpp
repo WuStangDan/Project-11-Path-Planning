@@ -523,7 +523,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     if (fsm.GetState() == 0 || fsm.GetState() == 4) {
       vals_size_min = 25;
     } else {
-      vals_size_min = 125;
+      vals_size_min = 25;
     }
     if (x_vals.size() < vals_size_min) {
       fsm.SetStateInProgress(false);
