@@ -374,7 +374,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
   vector<double> s;
   vector<double> d;
-  double time_to_s;
   double final_speed;
 
   if (fsm.GetStateInProgress() == false) {
@@ -384,7 +383,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         fsm.AchieveSpeedLimit();
         s = fsm.GetSPath();
         d = fsm.GetDPath();
-        time_to_s = fsm.GetTimeToSPath();
         final_speed = fsm.GetFinalSpeed();
         // xy to sd back to xy conversion isn't perfect since waypoints have
         // significant distance between them.
@@ -394,7 +392,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         fsm.StayInLane();
         s = fsm.GetSPath();
         d = fsm.GetDPath();
-        time_to_s = fsm.GetTimeToSPath();
         final_speed = fsm.GetFinalSpeed();
         cout << "State: Stay In Lane." << endl;
         break;
@@ -402,7 +399,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         fsm.FollowCar();
         s = fsm.GetSPath();
         d = fsm.GetDPath();
-        time_to_s = fsm.GetTimeToSPath();
         final_speed = fsm.GetFinalSpeed();
         cout << "State: Follow Car." << endl;
         break;
@@ -410,7 +406,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         fsm.PrepareLaneSwitch();
         s = fsm.GetSPath();
         d = fsm.GetDPath();
-        time_to_s = fsm.GetTimeToSPath();
         final_speed = fsm.GetFinalSpeed();
         cout << "State: Prepare Lane Switch." << endl;
         break;
@@ -418,7 +413,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         fsm.SwitchLanes();
         s = fsm.GetSPath();
         d = fsm.GetDPath();
-        time_to_s = fsm.GetTimeToSPath();
         final_speed = fsm.GetFinalSpeed();
         cout << "State: Switch Lanes." << endl;
         break;
@@ -434,14 +428,20 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     double heading = atan2(xy2[1] - xy1[1], xy2[0] - xy1[0]);
     //cout << "heading " << heading << " Cars current yaw " << car_yaw * 3.14159 / 180 << endl;
 
+    // Calculate new time to s based on xy distance.
+    double distance = (xy2[1] - car_y)*(xy2[1] - car_y) + (xy2[0] - car_x)*(xy2[0] - car_x);
+    distance = sqrt(distance);
+    cout << "Distance " << distance << endl;
+    double time_to_s = fsm.TimeToPath(distance);
+
     // Calculate JMT for X.
     vector<double> x;
     vector<double> start;
-    if (prev_x.size() < 9999) {
+    if (prev_x.size() < 999) {
       start = {car_x, car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
     } else {
-      start = {prev_x[4], car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
-      for (int i = 1; i < 4; i++) {
+      start = {prev_x[8], car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
+      for (int i = 1; i < 8; i++) {
         x.push_back(prev_x[i]);
       }
     }
@@ -459,11 +459,11 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
     // Calculate JMT for Y.
     vector<double> y;
-    if (prev_y.size() < 9999) {
+    if (prev_y.size() < 999) {
       start = {car_y, car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
     } else {
-      start = {prev_y[4], car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
-      for (int i = 1; i < 4; i++) {
+      start = {prev_y[8], car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
+      for (int i = 1; i < 8; i++) {
         y.push_back(prev_y[i]);
       }
     }
@@ -495,11 +495,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
     int smooth_runs = 0;
     while (smooth_runs > 0){
-      x_vals = RectSmooth(x_vals, 20);
-      x_vals = RectSmooth(x_vals, 5);
       x_vals = RectSmooth(x_vals, 1);
-      y_vals = RectSmooth(y_vals, 20);
-      y_vals = RectSmooth(y_vals, 5);
       y_vals = RectSmooth(y_vals, 1);
       smooth_runs -= 1;
     }
@@ -523,7 +519,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     if (fsm.GetState() == 0 || fsm.GetState() == 4) {
       vals_size_min = 25;
     } else {
-      vals_size_min = 25;
+      vals_size_min = 95;
     }
     if (x_vals.size() < vals_size_min) {
       fsm.SetStateInProgress(false);

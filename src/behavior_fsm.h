@@ -30,6 +30,8 @@ public:
   // Switch to a new lane.
   void SwitchLanes();
 
+  double TimeToPath(double dist);
+
   // Return current state.
   int GetState();
 

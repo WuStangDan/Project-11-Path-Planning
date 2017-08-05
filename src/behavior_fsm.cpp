@@ -21,7 +21,7 @@ void Fsm::UpdateState()
 {
   // Initial State. Can only change to Stay in Lane.
   if (state == 0) {
-    if (car_speed*mph_to_ms > 19.8) {
+    if (car_speed*mph_to_ms > 15) {
       state = 1;
       current_state_count = 0;
     }
@@ -50,7 +50,7 @@ void Fsm::UpdateState()
     }
     current_state_count += 1;
     cout << "State count " << current_state_count  << endl;
-    if (current_state_count > 3) {
+    if (current_state_count > 2) {
       state = 3;
       return;
     }
@@ -62,8 +62,8 @@ void Fsm::UpdateState()
     cout << "Target lane is " << target_lane << endl;
     if (target_lane != -1) {
       state = 4;
-      return;
     }
+    return;
   }
 
   // State 4 should only run once then complete.
@@ -71,9 +71,6 @@ void Fsm::UpdateState()
     state = 1;
     return;
   }
-
-
-
 }
 
 void Fsm::AchieveSpeedLimit()
@@ -82,14 +79,9 @@ void Fsm::AchieveSpeedLimit()
 
   s_path = {car_s+45, car_s+50};
   d_path = {6.0, 6.0};
-  //if (speed_diff < 5) speed_diff = 0;
-  final_speed = speed_limit*0.9;
-  if (car_speed*mph_to_ms > 10) {
-    time_to_s_path = ((50.0 / final_speed) + (50.0 / (car_speed*mph_to_ms)))/2;
-  } else {
-    time_to_s_path = 4;
-  }
+  final_speed = speed_limit*0.90;
 
+  TimeToPath(50.0);
   return;
 }
 
@@ -97,12 +89,10 @@ void Fsm::StayInLane()
 {
   int current_lane = FindLane(car_d);
 
-  s_path = {car_s+45, car_s+50};
+  s_path = {car_s+20, car_s+25};
   d_path = {current_lane*4 + 2.0, current_lane*4 + 2.0};
-  final_speed = speed_limit*0.95;
-  time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
-
-
+  final_speed = speed_limit*0.90;
+  TimeToPath(25.0);
 }
 
 void Fsm::FollowCar()
@@ -113,22 +103,21 @@ void Fsm::FollowCar()
   double infront_speed = sqrt(sf[id][3]*sf[id][3] + sf[id][4]*sf[id][4]);
   cout << "Infront speed " << infront_speed << endl;
 
-  s_path = {car_s+45, car_s+50};
+  s_path = {car_s+20, car_s+25};
   d_path = {current_lane*4+2.0, current_lane*4+2.0};
 
 
   if (sf[id][5] - car_s < 15) {
     final_speed = infront_speed *0.7;
     cout << "WAY TOO CLOSE" << endl;
-  } else if (sf[id][5] - car_s < 25 ) {
+  } else if (sf[id][5] - car_s < 20 ) {
     final_speed = infront_speed*0.9;
     cout << "Backing off" << endl;
   } else {
     final_speed = infront_speed;
     cout << "Matching Speed" << endl;
   }
-  time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
-
+  TimeToPath(25.0);
 }
 
 void Fsm::PrepareLaneSwitch()
@@ -161,10 +150,40 @@ void Fsm::SwitchLanes()
 {
   s_path = {car_s+45, car_s+50};
   d_path = {target_lane*4+2.0, target_lane*4+2.0};
-  final_speed = speed_limit*0.95;
-  time_to_s_path = ((50 / final_speed) + (50 / (car_speed*mph_to_ms)))/2;
+  final_speed = speed_limit*0.90;
+  TimeToPath(50.0);
 
   target_lane = -1;
+}
+
+double Fsm::TimeToPath(double dist)
+{
+  // Couldn't find underlying equation that picks boundary conditions for
+  // JMT and doesn't produce an undershoot or overshoot of velocity.
+  // Below are empirical results.
+  // Above 13.5, factor 1 is fine.
+  // 10 to 13.5 factor 0.9 is fine.
+  // 7.5 to 10 factor 0.8 is fine.
+  // 5 to 7.5 0.65 is fine.
+  // 5 and under 2.25 is fine.
+  double coeff_emp = 1.0; // Empirically found coefficient.
+  // It's clear there is some expontially decaying relationship but
+  // I couldn't find it.
+  if (car_speed*mph_to_ms < 13.5 && car_speed*mph_to_ms >= 10) {
+    coeff_emp = 0.9;
+  } else if (car_speed*mph_to_ms < 10 && car_speed*mph_to_ms >= 7.5) {
+    coeff_emp = 0.8;
+  } else if (car_speed*mph_to_ms < 7.5){
+    coeff_emp = 0.65;
+  }
+
+  if (car_speed*mph_to_ms > 5) {
+    time_to_s_path = ((dist / final_speed) + coeff_emp*(dist / (car_speed*mph_to_ms)))/2;
+  } else {
+    time_to_s_path = 2.25*dist/25.0;
+  }
+  cout << "Coeff " <<coeff_emp << " time to path " << time_to_s_path<< endl;
+  return time_to_s_path;
 }
 
 int Fsm::GetState()
@@ -210,7 +229,7 @@ bool Fsm::LaneFree(int lane)
   for (int i = 0; i < sf.size(); i++) {
     int sf_lane = FindLane(sf[i][6]);
     if (sf_lane == lane) {
-      if ((sf[i][5] - car_s) < 50 && (car_s - sf[i][5]) < 5) {
+      if ((sf[i][5] - car_s) < 50 && (car_s - sf[i][5]) < 20) {
         return false;
       }
     }
