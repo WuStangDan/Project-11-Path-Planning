@@ -378,7 +378,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
   if (fsm.GetStateInProgress() == false) {
     fsm.UpdateState();
-    cout << "State: " << fsm.GetState() << endl;
     switch (fsm.GetState()) {
       case 0:
         fsm.AchieveSpeedLimit();
@@ -450,8 +449,16 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
     vector<double> a_coeff = fsm.JMT(start, end, time_to_s);
 
+    int N;
+    if (fsm.GetState() == 0 || fsm.GetState() == 4) {
+      N = 150;
+    } else {
+      N = 55;
+    }
 
-    for (int i = 1; i < 150; i++) {
+
+
+    for (int i = 1; i < N; i++) {
       double T = i*dt;
       double xt = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
       xt += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
@@ -475,7 +482,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     a_coeff = fsm.JMT(start, end, time_to_s);
 
 
-    for (int i = 1; i < 150; i++) {
+    for (int i = 1; i < N; i++) {
       double T = i*dt;
       double yt = a_coeff[0] + a_coeff[1]*T + a_coeff[2]*pow(T,2);
       yt += a_coeff[3]*pow(T,3) + a_coeff[4]*pow(T,4) + a_coeff[5]*pow(T,5);
@@ -506,7 +513,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     if (fsm.GetState() == 0 || fsm.GetState() == 4) {
       vals_size_min = 40;
     } else {
-      vals_size_min = 149;
+      vals_size_min = 54;
     }
     if (x_vals.size() < vals_size_min) {
       fsm.SetStateInProgress(false);

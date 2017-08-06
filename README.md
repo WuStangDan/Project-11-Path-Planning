@@ -9,13 +9,13 @@ FSM deals solely in frenet coordinates and is responsible for the high level pla
 
 ## Rubric
 ### The car drives according to the speed limit.
-The car stays below the speed limit through two main methods. First final speed the car is trying to obtain when generating a jerk minimizing tracjory is 98% of the max speed limit. Second, all of the end times for the jerk minimizing trajectories (JMT) are set using the equation and logic seen below.
+The car stays below the speed limit through two main methods. First, the final speed the car is trying to obtain when generating a jerk minimizing tracjory is 98% of the max speed limit. Second, all of the end times for the jerk minimizing trajectories (JMT) are set using the equation and logic seen below.
 
-Setting the time correctly when generating a JMT is one of the most important and difficult aspects. If you set the time too short, the trajectory will have the car exceed the final speed you set as the car needs to make up ground in order to get to its final destination on time and going the correct speed. Conversely, If you set too large of a time, the trajectory will initially undershoot its current speed otherwise it would get to the destination too fast. Below are 3 graphs of JMT generated using the same code used in this project. The middle is a correct trajectory, the other two contain either overshooting or undershooting the current speed.
+Setting the time correctly when generating a JMT is one of the most important and difficult aspects. If you set the time too short, the trajectory will have the car exceed the final speed as the car needs to make up ground in order to get to its final destination on time and going the correct speed. Conversely, If you set too large of a time, the trajectory will initially undershoot its current speed otherwise it would get to the destination too early. Below are 3 graphs of JMT generated using the same code used in this project. The middle is a correct trajectory, the other two contain either overshooting or undershooting the current speed.
 
-Overshooting is an issue because it will eventually cause the car to exceed the speed limit. Undershooting however, is also a major issue. If a new trajectory is generated often, then the next starting point could be at a speed lower than the cars original speed (because of the undershoot). This will cause the next trajectory generated to also undershoot, reducing the speed further. Eventually the car would reach some steady state where it's speed won't increase or decrease, despite not being anywhere close to the final speed desired by the generated JMT.
+Overshooting is an issue because it will eventually cause the car to exceed the speed limit. Undershooting is also a major issue. If a new trajectory is generated often, then the next starting point could be at a speed lower than the cars original speed (because of the undershoot). This will cause the next trajectory generated to also undershoot, reducing the speed further. Eventually the car would reach some steady state where it's speed won't increase or decrease, despite not being anywhere close to the final speed desired by the generated JMT.
 
-Using experimenting with different JMT time values I came up with the following empircal equation. Using the cars current speed and final speed, this equation will always generate a JMT that contains no overshoot or undershoot of speed. There seems to be some sort of exponentially decaying relationship going on (0.81 = 0.9<sup>2</sup>, 0.65 = 0.9<sup>4</sup>) but I didn't find it.
+Experimenting with different JMT time values I came up with the following empirical equation. Using the cars current speed and final speed, this equation will always generate a JMT that contains no overshoot or undershoot of speed. There seems to be some sort of exponentially decaying relationship going on (0.81 = 0.9<sup>2</sup>, 0.65 = 0.9<sup>4</sup>) with the coefficent I used, but I couldn't find a more elegant way to determine it.
 
 ```
 double Fsm::TimeToPath(double dist)
@@ -39,6 +39,8 @@ double Fsm::TimeToPath(double dist)
 ![Undershoot](undershoot.png "Undershoot")
 ![Perfect](perfect.png "Perfect")
 ![Overshoot](overshoot.png "Overshoot")
+
+Another possible method for solving this problem would have been to use a JMT sampling approach with a cost function. I could then randomly generate a large number of JMT's and eliminate all of those with a undershoot, overshoot, or other undesirable outcomes.
 
 
 ### Max Acceleration and Jerk are not Exceeded.
@@ -66,3 +68,7 @@ All of this happens with in the function Fsm::FollowCar(), Fsm::PrepareLaneSwitc
 
 ### The car stays in its lane, except for the time between changing lanes.
 The function Fsm::StayInLane() is the default state when there are no other cars around. This keeps the car in the lane it is currently in. When changing lanes a single JMT is produced which executes the lane change in about 2 seconds.
+
+
+## Future Work
+Some areas for future work include implementing a sampling based approach for lane switching trajoctory generation. Another area of future work would be to create a prediction layer that allows for better decision making of the FSM by predicting where other cars will be in future time steps. Currently the FSM only makes decisions using current sensor fusion data.
