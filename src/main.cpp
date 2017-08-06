@@ -404,13 +404,9 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         cout << "State: Follow Car." << endl;
         break;
       case 3:
-        cout << "here" << endl;
         fsm.PrepareLaneSwitch();
-        cout << "here" << endl;
         s = fsm.GetSPath();
-        cout << "here" << endl;
         d = fsm.GetDPath();
-        cout << "here" << endl;
         final_speed = fsm.GetFinalSpeed();
         cout << "State: Prepare Lane Switch." << endl;
         break;
@@ -425,13 +421,8 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
     // Calculate xy for end points decided by FSM.
     vector<double> xy1 = getXY(s[0], d[0], g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
-    //cout << "New endpoints X, Y, S, D " << xy1[0] << ", " << xy1[1] << ", ";
-    //cout << s[0] << ", " << d[0] << endl;
     vector<double> xy2 = getXY(s[1], d[1], g_map_waypoints_s, g_map_waypoints_x, g_map_waypoints_y);
-    //cout << "New endpoints X, Y, S, D " << xy2[0] << ", " << xy2[1] << ", ";
-    //cout << s[0] << ", " << d[0] << endl;
     double heading = atan2(xy2[1] - xy1[1], xy2[0] - xy1[0]);
-    //cout << "heading " << heading << " Cars current yaw " << car_yaw * 3.14159 / 180 << endl;
 
     // Calculate new time to s based on xy distance.
     double distance = (xy2[1] - car_y)*(xy2[1] - car_y) + (xy2[0] - car_x)*(xy2[0] - car_x);
@@ -491,19 +482,8 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
       y.push_back(yt);
     }
 
-
-
     x_vals = x;
     y_vals = y;
-    //cout << "New XY " << endl;
-    //for (int i = 0; i < x_vals.size(); i++) {
-    //  cout << "X, Y " << x_vals[i] << ", " << y_vals[i] << endl;
-    //}
-
-
-
-    //x_vals = raw_x_vals;
-    //y_vals = raw_y_vals;
 
     int smooth_runs = 0;
     while (smooth_runs > 0){
@@ -511,11 +491,6 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
       y_vals = RectSmooth(y_vals, 1);
       smooth_runs -= 1;
     }
-
-    //cout << "X and Y" << endl << endl;
-    //for (int i = 0; i < x_vals.size(); i++) {
-    //  cout << "X, Y " << x_vals[i] << ", " << y_vals[i] << endl;
-    //}
 
     fsm.SetStateInProgress(true);
   } else {

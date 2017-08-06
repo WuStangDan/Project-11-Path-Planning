@@ -1,134 +1,65 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
    
-### Simulator. You can download the Term3 Simulator BETA which contains the Path Planning Project from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
+## High Level Code Description
 
-In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 50 m/s^3.
+The code is broken up into a class called FSM and a function called CreatePath. CreatePath is called by the main loop and all of its code is located in main.cpp. CreatePath uses the class FSM (located in behavoir\_fsm.cpp).
 
-#### The map of the highway is in data/highway_map.txt
-Each waypoint in the list contains  [x,y,s,dx,dy] values. x and y are the waypoint's map coordinate position, the s value is the distance along the road to get to that waypoint in meters, the dx and dy values define the unit normal vector pointing outward of the highway loop.
+FSM deals solely in frenet coordinates and is responsible for the high level planning. It processes the sensor fusion data to determine which state should be selected and based on its state it determines a frenet coordinate waypoint for the car to travel too. CreatePath takes in the frenet coordinate waypoint, translates it to cartesian coordinates, and generates a jerk minimizing trajectory to reach the waypoint destination.
 
-The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
+## Rubric
+### The car drives according to the speed limit.
+The car stays below the speed limit through two main methods. First final speed the car is trying to obtain when generating a jerk minimizing tracjory is 98% of the max speed limit. Second, all of the end times for the jerk minimizing trajectories (JMT) are set using the equation and logic seen below.
 
-## Basic Build Instructions
+Setting the time correctly when generating a JMT is one of the most important and difficult aspects. If you set the time too short, the trajectory will have the car exceed the final speed you set as the car needs to make up ground in order to get to its final destination on time and going the correct speed. Conversely, If you set too large of a time, the trajectory will initially undershoot its current speed otherwise it would get to the destination too fast. Below are 3 graphs of JMT generated using the same code used in this project. The middle is a correct trajectory, the other two contain either overshooting or undershooting the current speed.
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./path_planning`.
+Overshooting is an issue because it will eventually cause the car to exceed the speed limit. Undershooting however, is also a major issue. If a new trajectory is generated often, then the next starting point could be at a speed lower than the cars original speed (because of the undershoot). This will cause the next trajectory generated to also undershoot, reducing the speed further. Eventually the car would reach some steady state where it's speed won't increase or decrease, despite not being anywhere close to the final speed desired by the generated JMT.
 
-Here is the data provided from the Simulator to the C++ Program
-
-#### Main car's localization Data (No Noise)
-
-["x"] The car's x position in map coordinates
-
-["y"] The car's y position in map coordinates
-
-["s"] The car's s position in frenet coordinates
-
-["d"] The car's d position in frenet coordinates
-
-["yaw"] The car's yaw angle in the map
-
-["speed"] The car's speed in MPH
-
-#### Previous path data given to the Planner
-
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time. 
-
-["previous_path_x"] The previous list of x points previously given to the simulator
-
-["previous_path_y"] The previous list of y points previously given to the simulator
-
-#### Previous path's end s and d values 
-
-["end_path_s"] The previous list's last point's frenet s value
-
-["end_path_d"] The previous list's last point's frenet d value
-
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
-
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
-
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
-
----
-
-## Dependencies
-
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets 
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+Using experimenting with different JMT time values I came up with the following empircal equation. Using the cars current speed and final speed, this equation will always generate a JMT that contains no overshoot or undershoot of speed.
 
 
-## Call for IDE Profiles Pull Requests
+`double Fsm::TimeToPath(double dist)
+{
+  if (car_speed*mph_to_ms < 13.5 && car_speed*mph_to_ms >= 10) {
+    coeff_emp = 0.9;
+  } else if (car_speed*mph_to_ms < 10 && car_speed*mph_to_ms >= 7.5) {
+    coeff_emp = 0.8;
+  } else if (car_speed*mph_to_ms < 7.5){
+    coeff_emp = 0.65;
+  }
+  if (car_speed*mph_to_ms > 5) {
+    time_to_s_path = ((dist / final_speed) + coeff_emp*(dist / (car_speed*mph_to_ms)))/2;
+  } else {
+    time_to_s_path = 2.25*dist/25.0;
+  }
+  return time_to_s_path;
+}`
 
-Help your fellow students!
+![Undershoot](undershoot.png "Undershoot")
+![Perfect](perfect.png "Perfect")
+![Overshoot](overshoot.png "Overshoot")
 
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
 
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
+### Max Acceleration and Jerk are not Exceeded.
+Max acceleration and max jerk and avoided by using jerk minimizing tractory generation with proper boundary conditions. Also previously generated tracjectory's are used for generating new tracjory's (see below code) to ensure smooth transitions between newly generated paths.
 
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
+`vector<double> y;
+ if (prev_y.size() < 10) {
+   start = {car_y, car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
+ } else {
+   double v1 = (prev_y[9] - prev_y[8])*50;
+   double v0 = (prev_y[8] - prev_y[7])*50;
+   start = {prev_y[9], v1, v1 - v0};
+   for (int i = 1; i <= 9; i++) {
+     y.push_back(prev_y[i]);
+   }
+ }`
+ 
+ ### Car does not have collisions and the car is able to change lanes.
+ The FSM class switches between finite states to ensure that the car won't collide with other cars on the road. Once a car is spotted within range by looking at the sensor fusion data, the FSM will switch to follow car mode, which first maintains a safe distance behind the car infront of it and then matches it speed. If there is an opening in an adjacent lane the car will then move to this lane and pass the car if it is free to do so.
+ 
+All of this happens with in the function Fsm::FollowCar(), Fsm::PrepareLaneSwitch(), and Fsm::SwitchLanes().
 
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
 
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
+### The car stays in its lane, except for the time between changing lanes.
+The function Fsm::StayInLane() is the default state when there are no other cars around. This keeps the car in the lane it is currently in. When changing lanes a single JMT is produced which executes the lane change in about 2 seconds.

@@ -79,7 +79,7 @@ void Fsm::AchieveSpeedLimit()
 
   s_path = {car_s+45, car_s+50};
   d_path = {6.0, 6.0};
-  final_speed = speed_limit*0.90;
+  final_speed = speed_limit*0.98;
 
   TimeToPath(50.0);
   return;
@@ -91,7 +91,7 @@ void Fsm::StayInLane()
 
   s_path = {car_s+20, car_s+25};
   d_path = {current_lane*4 + 2.0, current_lane*4 + 2.0};
-  final_speed = speed_limit*0.90;
+  final_speed = speed_limit*0.98;
   TimeToPath(25.0);
 }
 
@@ -156,7 +156,7 @@ void Fsm::SwitchLanes()
 {
   s_path = {car_s+45, car_s+50};
   d_path = {target_lane*4+2.0, target_lane*4+2.0};
-  final_speed = speed_limit*0.90;
+  final_speed = speed_limit*0.98;
   TimeToPath(50.0);
 
   target_lane = -1;
