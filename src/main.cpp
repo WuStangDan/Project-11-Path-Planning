@@ -378,6 +378,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
   if (fsm.GetStateInProgress() == false) {
     fsm.UpdateState();
+    cout << "State: " << fsm.GetState() << endl;
     switch (fsm.GetState()) {
       case 0:
         fsm.AchieveSpeedLimit();
@@ -403,9 +404,13 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
         cout << "State: Follow Car." << endl;
         break;
       case 3:
+        cout << "here" << endl;
         fsm.PrepareLaneSwitch();
+        cout << "here" << endl;
         s = fsm.GetSPath();
+        cout << "here" << endl;
         d = fsm.GetDPath();
+        cout << "here" << endl;
         final_speed = fsm.GetFinalSpeed();
         cout << "State: Prepare Lane Switch." << endl;
         break;
@@ -431,17 +436,22 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
     // Calculate new time to s based on xy distance.
     double distance = (xy2[1] - car_y)*(xy2[1] - car_y) + (xy2[0] - car_x)*(xy2[0] - car_x);
     distance = sqrt(distance);
-    cout << "Distance " << distance << endl;
     double time_to_s = fsm.TimeToPath(distance);
 
     // Calculate JMT for X.
     vector<double> x;
     vector<double> start;
-    if (prev_x.size() < 999) {
+    if (prev_x.size() < 10) {
       start = {car_x, car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
     } else {
-      start = {prev_x[8], car_speed*mph_to_ms*cos(car_yaw * 3.14159 / 180), 0};
-      for (int i = 1; i < 8; i++) {
+      distance = (xy2[1] - prev_y[9])*(xy2[1] - prev_y[9]) + (xy2[0] - prev_x[9])*(xy2[0] - prev_x[9]);
+      distance = sqrt(distance);
+      time_to_s = fsm.TimeToPath(distance);
+
+      double v1 = (prev_x[9] - prev_x[8])*50;
+      double v0 = (prev_x[8] - prev_x[7])*50;
+      start = {prev_x[9], v1, v1 - v0};
+      for (int i = 1; i <= 9; i++) {
         x.push_back(prev_x[i]);
       }
     }
@@ -459,11 +469,13 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
     // Calculate JMT for Y.
     vector<double> y;
-    if (prev_y.size() < 999) {
+    if (prev_y.size() < 10) {
       start = {car_y, car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
     } else {
-      start = {prev_y[8], car_speed*mph_to_ms*sin(car_yaw * 3.14159 / 180), 0};
-      for (int i = 1; i < 8; i++) {
+      double v1 = (prev_y[9] - prev_y[8])*50;
+      double v0 = (prev_y[8] - prev_y[7])*50;
+      start = {prev_y[9], v1, v1 - v0};
+      for (int i = 1; i <= 9; i++) {
         y.push_back(prev_y[i]);
       }
     }
@@ -500,7 +512,7 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
       smooth_runs -= 1;
     }
 
-    //cout << "New Smooth" << endl;
+    //cout << "X and Y" << endl << endl;
     //for (int i = 0; i < x_vals.size(); i++) {
     //  cout << "X, Y " << x_vals[i] << ", " << y_vals[i] << endl;
     //}
@@ -517,9 +529,9 @@ void CreatePath(Fsm &fsm, vector<double> &x_vals, vector<double> &y_vals, vector
 
     int vals_size_min;
     if (fsm.GetState() == 0 || fsm.GetState() == 4) {
-      vals_size_min = 25;
+      vals_size_min = 40;
     } else {
-      vals_size_min = 95;
+      vals_size_min = 149;
     }
     if (x_vals.size() < vals_size_min) {
       fsm.SetStateInProgress(false);

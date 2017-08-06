@@ -100,6 +100,12 @@ void Fsm::FollowCar()
   int id = CarInFront();
   int current_lane = FindLane(car_d);
 
+  // If id = -1, car must have just moved out of range.
+  if (id == -1) {
+    StayInLane();
+    return;
+  }
+
   double infront_speed = sqrt(sf[id][3]*sf[id][3] + sf[id][4]*sf[id][4]);
   cout << "Infront speed " << infront_speed << endl;
 
@@ -182,7 +188,6 @@ double Fsm::TimeToPath(double dist)
   } else {
     time_to_s_path = 2.25*dist/25.0;
   }
-  cout << "Coeff " <<coeff_emp << " time to path " << time_to_s_path<< endl;
   return time_to_s_path;
 }
 
